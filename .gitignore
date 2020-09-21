@@ -1,0 +1,9 @@
+**/*.out
+cmake-build*
+build*
+.idea
+.vscode
+.code
+**/*~
+**/*.swp
+**/*.log
