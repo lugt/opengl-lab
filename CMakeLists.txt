@@ -28,6 +28,7 @@ message(STATUS "GLFW_INCLUDE_DIRS at ${GLFW_INCLUDE_DIRS} FOUND")
 message(STATUS "GLFW_LIBRARIES at ${GLFW_LIBRARIES} FOUND")
 
 add_library(basic_library
+        src/u_utils.cxx
         src/stb_impl.cxx
         src/Common/InitShader.cpp)
 target_compile_options(basic_library PRIVATE
@@ -42,7 +43,7 @@ target_include_directories(basic_library PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/include/stb)
 
 
-add_executable(basic_window src/main2.cxx)
+add_executable(basic_window src/lab12.cxx)
 add_executable(triangle src/main.cpp)
 add_executable(delayance src/delayance.cxx)
 
