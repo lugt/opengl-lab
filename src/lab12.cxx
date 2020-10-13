@@ -80,7 +80,7 @@ vec2 getEllipseVertex(const vec2 &center, double scale, double verticalScale,
 
 // 根据角度生成颜色
 float generateAngleColor(double angle) {
-  return 1.0 / (2 * M_PI) * angle;
+  return (float) (1.0 / (2 * M_PI) * (angle - (0.0 * M_PI)));
 }
 
 // 获得三角形的每个角度
@@ -98,7 +98,7 @@ void generateEllipsePoints(vec2 vertices[], vec3 colors[], int startVertexIndex,
                            const vec2 &center, double scale,
                            double verticalScale) {
   double angleIncrement = (2 * M_PI) / numPoints;
-  double currentAngle   = M_PI / 2;
+  double currentAngle   = 0;
 
   for (int i = startVertexIndex; i < startVertexIndex + numPoints; ++i) {
     vertices[i] = getEllipseVertex(center, scale, verticalScale, currentAngle);
@@ -123,8 +123,8 @@ generateTrianglePoints(vec2 vertices[], vec3 colors[], int startVertexIndex) {
   }
 
   colors[startVertexIndex]     = RED;
-  colors[startVertexIndex + 1] = GREEN;
-  colors[startVertexIndex + 2] = BLUE;
+  colors[startVertexIndex + 1] = BLUE;
+  colors[startVertexIndex + 2] = GREEN;
 }
 
 void generateSquarePoints(vec2 vertices[], vec3 colors[], int squareNumber,
@@ -315,7 +315,7 @@ int main() {
   glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
   // Create a GLFWwindow object that we can use for GLFW's functions
-  GLFWwindow *window = glfwCreateWindow(WIDTH, HEIGHT, "LearnOpenGL", NULL,
+  GLFWwindow *window = glfwCreateWindow(WIDTH, HEIGHT, "2017152003_GuantingLu_Shiyan1", NULL,
                                         NULL);
   if (window == NULL) {
     std::cout << "Failed to create GLFW window" << std::endl;
