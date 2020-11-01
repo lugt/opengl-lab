@@ -203,8 +203,8 @@ void init() {
 
   // 读取着色器并使用
   GLuint program = InitShader(
-    "/Users/xc5/CLionProjects/opengl/example2/src/vshader.glsl",
-    "/Users/xc5/CLionProjects/opengl/example2/src/fshader.glsl");
+    "/Users/xc5/CLionProjects/opengl/example2/src/lab1/vshader.glsl",
+    "/Users/xc5/CLionProjects/opengl/example2/src/lab1/fshader.glsl");
   glUseProgram(program);
   shaderProgram = program;
 

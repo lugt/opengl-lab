@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(SetupHunter)
 
 project(example-gl)
 
-add_library(glad_lib src/glad.c)
+add_library(glad_lib src/lab1/glad.c)
 target_include_directories(glad_lib PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/include
         ${CMAKE_CURRENT_LIST_DIR}/include/glad)
@@ -28,8 +28,8 @@ message(STATUS "GLFW_INCLUDE_DIRS at ${GLFW_INCLUDE_DIRS} FOUND")
 message(STATUS "GLFW_LIBRARIES at ${GLFW_LIBRARIES} FOUND")
 
 add_library(basic_library
-        src/u_utils.cxx
-        src/stb_impl.cxx
+        src/Common/u_utils.cxx
+        src/Common/stb_impl.cxx
         src/Common/InitShader.cpp)
 target_compile_options(basic_library PRIVATE
         -std=c++11
@@ -43,9 +43,9 @@ target_include_directories(basic_library PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/include/stb)
 
 
-add_executable(basic_window src/lab12.cxx)
-add_executable(triangle src/main.cpp)
-add_executable(delayance src/delayance.cxx)
+add_executable(basic_window src/lab1/lab12.cxx)
+add_executable(triangle src/lab1/main.cpp)
+add_executable(delayance src/lab1/delayance.cxx)
 
 set(ALL_TARGETS_IN_PROJ basic_window triangle delayance)
 foreach(ONE_TARG IN LISTS ALL_TARGETS_IN_PROJ)
