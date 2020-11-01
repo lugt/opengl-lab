@@ -93,6 +93,10 @@ class OFFFile {
   OFFFile(const OFFFile &&) = delete; // Move not allowed
 
 public:
+  OFFFile():
+    _vertex(0), _faces(0),
+    _n_vertex(0), _n_faces(0), _n_lines(0) {};
+
   OFFFile(UINT32 n_v, UINT32 n_f,  UINT32 n_l) :
     _vertex(0), _faces(0),
     _n_vertex(n_v), _n_faces(n_f), _n_lines(n_l) {}
@@ -252,6 +256,28 @@ INLINE void refreshFrame(GLFWwindow *window, INT32 shaderProgram, INT32 VAO) {
   glDrawArrays(GL_TRIANGLES, 0, points.size());
 }
 
+// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow *window)
+{
+  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    glfwSetWindowShouldClose(window, true);
+}
+
+// Is called whenever a key is pressed/released via GLFW
+void
+key_callback(GLFWwindow *window, int key, int scancode, int action, int mode) {
+  std::cout << key << std::endl;
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    glfwSetWindowShouldClose(window, GL_TRUE);
+  }
+}
+
+// Resize callback
+void framebuffer_size_callback(GLFWwindow *window, INT32 width, INT32 height) {
+  glViewport(0, 0, width, height);
+}
+
 // The MAIN function, from here we start the application and run the game loop
 int main() {
 
@@ -274,8 +300,10 @@ int main() {
     return -1;
   }
 
+  OFFFile off_core;
+
   // 读取off模型文件
-  read_off("cube.off");
+  read_off("cube.off", off_core);
 
   glfwMakeContextCurrent(window);
 
@@ -302,7 +330,7 @@ int main() {
   while (!glfwWindowShouldClose(window)) {
 
     // process input info
-    processInput(window, shaderProgram, VAO);
+    processInput(window);
 
     refreshFrame(window, shaderProgram, VAO);
 
@@ -316,13 +344,4 @@ int main() {
   // Terminates GLFW, clearing any resources allocated by GLFW.
   glfwTerminate();
   return 0;
-}
-
-// Is called whenever a key is pressed/released via GLFW
-void
-key_callback(GLFWwindow *window, int key, int scancode, int action, int mode) {
-  std::cout << key << std::endl;
-  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-    glfwSetWindowShouldClose(window, GL_TRUE);
-  }
 }
