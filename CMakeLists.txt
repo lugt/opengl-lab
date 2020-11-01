@@ -46,8 +46,9 @@ target_include_directories(basic_library PRIVATE
 add_executable(basic_window src/lab1/lab12.cxx)
 add_executable(triangle src/lab1/main.cpp)
 add_executable(delayance src/lab1/delayance.cxx)
+add_executable(lab2 src/lab2/main.cpp)
 
-set(ALL_TARGETS_IN_PROJ basic_window triangle delayance)
+set(ALL_TARGETS_IN_PROJ basic_window triangle delayance lab2)
 foreach(ONE_TARG IN LISTS ALL_TARGETS_IN_PROJ)
     target_link_directories(${ONE_TARG} PRIVATE ${GLFW_LIBRARY_DIRS})
     target_include_directories(${ONE_TARG} PRIVATE
@@ -63,6 +64,7 @@ foreach(ONE_TARG IN LISTS ALL_TARGETS_IN_PROJ)
             ${GLFW_LIBRARIES}
             basic_library
             glad_lib)
+    target_compile_options(${ONE_TARG} PRIVATE -std=c++14)
 endforeach()
 
 #"-framework CoreVideo"
