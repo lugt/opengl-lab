@@ -21,23 +21,13 @@
 #include <u_trace.h>
 
 #include <u_colors.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include "unistd.h"
 
 #define INLINE inline
 
 // 三角面片中的顶点序列
-typedef struct vIndex {
-	unsigned int a, b, c;
-	vIndex(int ia, int ib, int ic) : a(ia), b(ib), c(ic) {}
-} vec3i;
-
-std::string filename;
-std::vector<vec3> vertices;
-std::vector<vec3i> faces;
-
-int nVertices = 0;
-int nFaces = 0;
-int nEdges = 0;
-
 
 // Window dimensions
 const GLuint WIDTH = 1024, HEIGHT = 1024;
@@ -48,9 +38,8 @@ static UINT32 VAO;
 // Default shader program, merely does nothing.
 static INT32 shaderProgram;
 
+static UINT32 total_points_size = 0;
 
-std::vector<vec3> points;   //传入着色器的绘制点
-std::vector<vec3> colors;   //传入着色器的颜色
 
 const int NUM_VERTICES = 8;
 
@@ -69,22 +58,54 @@ const vec3 basic_universal_colors[NUM_VERTICES] = {
 using std::vector;
 
 
-struct INT3LIST {
+struct VEC4I_T {
   union {
     struct {
-      UINT32 x;
-      UINT32 y;
-      UINT32 z;
+      UINT32 a;
+      UINT32 b;
+      UINT32 c;
+      UINT32 color;
     };
-    UINT32 _val[3];
+    struct {
+      UINT32 x,y,z;
+    };
+    UINT32 _val[4];
   };
 };
+typedef VEC4I_T VEC4I;
 
-typedef INT3LIST face3;
+class VEC3_READER {
+public:
+  void Read(std::ifstream &input, vec3 & output) {
+    FLOAT64 x, y, z;
+    input >> x >> y >> z;
+    output.x = x;
+    output.y = y;
+    output.z = z;
+  }
+};
+
+class VEC4_READER {
+  static UINT32 color_indicator;
+public:
+  void Read(std::ifstream &input, VEC4I &output) {
+    UINT32 x, y, z, count;
+    input >> count >>  x >> y >> z;
+    Is_True(count == 3, ("Should be 3 points in a facet, instead of %d.", count));
+    output.x = x;
+    output.y = y;
+    output.z = z;
+    output.color = color_indicator % 8;
+    color_indicator ++;
+  }
+};
+
+UINT32 VEC4_READER::color_indicator = 0;
+
 
 class OFFFile {
   vector<vec3>     _vertex;
-  vector<face3>    _faces;
+  vector<VEC4I>    _faces;
   UINT32           _n_vertex;
   UINT32           _n_faces;
   UINT32           _n_lines;
@@ -103,7 +124,7 @@ public:
 
   vector<vec3> &getVertex() { return _vertex; }
 
-  vector<face3> &getFaces() { return _faces; }
+  vector<VEC4I> &getFaces() { return _faces; }
 
   UINT32 getNVertex() const {
     return _n_vertex;
@@ -128,64 +149,94 @@ public:
   void setNLines(UINT32 nLines) {
     _n_lines = nLines;
   }
+
+  template<typename T, typename LSTITEM, typename READER>
+  void Read_list_from_istream(UINT32 size,
+                              std::ifstream &input,
+                              vector<LSTITEM> &output) {
+    output.resize(size);
+    READER r;
+    for (UINT32 i = 0; i < size; ++i) {
+      LSTITEM& cur_item = output.at(i);
+      r.Read(input, cur_item);
+    }
+  }
+
+  void Read_from_file(const std::string &off_file_name) {
+    OFFFile &off = *this;
+    if (off_file_name.empty()) {
+      return;
+    }
+
+    Is_True((access(off_file_name.c_str(), F_OK) != -1), ("OFF file not existing"));
+
+    UINT32 n_vertex = 0, n_face = 0, n_lines = 0;
+    std::ifstream fin;
+    std::string first_line;
+    fin.open(off_file_name);
+
+    // @TODO: 修改此函数读取OFF文件中三维模型的信息
+    std::getline(fin, first_line);
+    fin >> n_vertex >> n_face >> n_lines;
+    off.setNVertex(n_vertex);
+    off.setNFaces(n_face);
+    off.setNLines(n_lines);
+    off.getFaces().resize(n_face);
+    Read_list_from_istream<FLOAT64, vec3, VEC3_READER>(n_vertex, fin, off.getVertex());
+    Read_list_from_istream<UINT32, VEC4I, VEC4_READER>(n_face, fin, off.getFaces());
+    fin.close();
+  }
+
+  void Get_facet_points(vector<vec3> &points, vector<vec3> &colors) {
+    for (UINT32 i = 0; i < getFaces().size(); i++) {
+      // Dump the points in the triangle.
+      VEC4I &triangle = getFaces().at(i);
+      for (UINT32 j = 0; j < 3; j++) {
+        Is_True(triangle.color < sizeof(basic_universal_colors) / sizeof(vec3), ("Not a valid color : %d", triangle.color));
+        points.push_back(getVertex().at(triangle._val[j]));
+        colors.push_back(basic_universal_colors[triangle.color]);
+      }
+    }
+  }
 };
 
-template<typename T, typename LIST>
-void Read_list_from_istream(UINT32 size,
-                            std::ifstream &input,
-                            vector<LIST> &output) {
-  output.resize(size);
-  for (UINT32 i = 0; i < size; ++i) {
-    T x, y, z;
-    input >> x >> y >> z;
-    LIST& cur_vertex = output.at(i);
-    cur_vertex.x = x;
-    cur_vertex.y = y;
-    cur_vertex.z = z;
-  }
-}
 
 
-void read_off(const std::string filename, OFFFile &off)
+void storeFacesPoints(const char *file_path, vector<vec3> &points,
+                      vector <vec3> &colors)
 {
-	if (filename.empty()) {
-		return;
-	}
+  // Define a struct to contain the OFF file contents.
+  OFFFile off;
 
-	UINT32 n_vertex = 0, n_face = 0, n_lines = 0;
-	std::ifstream fin;
-	std::string first_line;
-	fin.open(filename);
+  // Read OFF file from scratch.
+  off.Read_from_file(file_path);
 
-	// @TODO: 修改此函数读取OFF文件中三维模型的信息
-	std::getline(fin, first_line);
-	fin >> n_vertex >> n_face >> n_lines;
-	off.setNVertex(n_vertex);
-	off.setNFaces(n_face);
-	off.setNLines(n_lines);
-  off.getFaces().resize(n_face);
-  Read_list_from_istream<FLOAT64, vec3>(n_vertex, fin, off.getVertex());
-  Read_list_from_istream<UINT32, face3>(n_face, fin, off.getFaces());
-  fin.close();
-}
+  // @TODO: 修改此函数在points和colors容器中存储每个三角面片的各个点和颜色信息
+  points.clear();
+  colors.clear();
 
+  // Transform off content to points and colors.
+  off.Get_facet_points(points, colors);
 
-void storeFacesPoints()
-{
-	points.clear();
-	colors.clear();
-
-	// @TODO: 修改此函数在points和colors容器中存储每个三角面片的各个点和颜色信息
+  // Set to total size;
+  total_points_size = points.size();
 }
 
 void init()
 {
-	storeFacesPoints();
+  std::vector<vec3> points;   //传入着色器的绘制点
+  std::vector<vec3> colors;   //传入着色器的颜色
 
-	// 创建顶点数组对象
+  storeFacesPoints("/Users/xc5/CLionProjects/opengl/example2/Models/cow.off",
+                   points, colors);
+
+  // 创建顶点数组对象
 	GLuint vao[1];
 	glGenVertexArrays(1, vao);
 	glBindVertexArray(vao[0]);
+
+	Is_True(colors.size() > 0, ("Colors size is zero."));
+  Is_True(points.size() > 0, ("Points size is zero."));
 
 	// 创建并初始化顶点缓存对象
 	GLuint buffer;
@@ -195,8 +246,8 @@ void init()
 
 	// @TODO: 修改完成后再打开下面注释，否则程序会报错
 	// 分别读取数据
-	//glBufferSubData(GL_ARRAY_BUFFER, 0, points.size() * sizeof(vec3), &points[0]);
-	//glBufferSubData(GL_ARRAY_BUFFER, points.size() * sizeof(vec3), colors.size() * sizeof(vec3), &colors[0]);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, points.size() * sizeof(vec3), &points[0]);
+	glBufferSubData(GL_ARRAY_BUFFER, points.size() * sizeof(vec3), colors.size() * sizeof(vec3), &colors[0]);
 
 	// 读取着色器并使用
 	GLuint program = InitShader("/Users/xc5/CLionProjects/opengl/example2/src/lab2/vshader.glsl",
@@ -239,21 +290,24 @@ void init()
 
 
 INLINE void refreshFrame(GLFWwindow *window, INT32 shaderProgram, INT32 VAO) {
-  // 清理窗口
-  glClearColor(BG.x, BG.y, BG.z, 1.0);
-  glClear(GL_COLOR_BUFFER_BIT);
-  glClearColor(BG.x, BG.y, BG.z, 1.0);
+//  // 清理窗口
+//  glClearColor(BG.x, BG.y, BG.z, 1.0);
+//  glClear(GL_COLOR_BUFFER_BIT);
+//  glClearColor(BG.x, BG.y, BG.z, 1.0);
+  Is_True(total_points_size > 0, ("No points to draw"));
 
   // @TODO: 清理窗口，包括颜色缓存和深度缓存
   glClear(GL_COLOR_BUFFER_BIT);
 
   // 绘制边
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+
   // 消除背面光照
   glEnable(GL_CULL_FACE);
   glCullFace(GL_FRONT);
 
-  glDrawArrays(GL_TRIANGLES, 0, points.size());
+  glDrawArrays(GL_TRIANGLES, 0, total_points_size);
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -300,12 +354,22 @@ int main() {
     return -1;
   }
 
-  OFFFile off_core;
-
-  // 读取off模型文件
-  read_off("cube.off", off_core);
-
   glfwMakeContextCurrent(window);
+
+  // Ensure we can capture the escape key being pressed below
+  glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+  // Hide the mouse and enable unlimited mouvement
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+  // Set the mouse at the center of the screen
+  glfwPollEvents();
+  glfwSetCursorPos(window, WIDTH/2, HEIGHT/2);
+
+  // Enable depth test
+  // glEnable(GL_DEPTH_TEST);
+
+  // Accept fragment if it closer to the camera than the former one
+  // glDepthFunc(GL_LESS);
 
   // Set the required callback functions
   glfwSetKeyCallback(window, key_callback);
@@ -325,6 +389,9 @@ int main() {
 
   // Initialize shaders
   init();
+
+  //glEnable(GL_DEPTH_TEST);
+  //glDepthFunc(GL_LESS);
 
   // Game loop
   while (!glfwWindowShouldClose(window)) {
