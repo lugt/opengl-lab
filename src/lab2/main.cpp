@@ -204,9 +204,11 @@ public:
       // Dump the points in the triangle.
       VEC4I &triangle = getFaces().at(i);
       for (UINT32 j = 0; j < 3; j++) {
-        Is_True(triangle.color < sizeof(basic_universal_colors) / sizeof(vec3), ("Not a valid color : %d", triangle.color));
+        Is_True(triangle.color < sizeof(basic_universal_colors) / sizeof(vec3),
+                ("Not a valid color : %d", triangle.color));
         points.push_back(getVertex().at(triangle._val[j]));
-        colors.push_back(basic_universal_colors[triangle.color]);
+        UINT32 vertex_id = triangle._val[j];
+        colors.push_back(basic_universal_colors[vertex_id % NUM_VERTICES]);
       }
     }
   }
@@ -268,7 +270,8 @@ void init()
   std::vector<vec3> points;   //传入着色器的绘制点
   std::vector<vec3> colors;   //传入着色器的颜色
 
-  storeFacesPoints("/Users/xc5/CLionProjects/opengl/example2/Models/cow.off",
+  storeFacesPoints("/Users/xc5/CLionProjects/opengl/example2/Models/cube.off",
+                   //"/Users/xc5/CLionProjects/opengl/example2/Models/cow.off",
                    points, colors);
 
   // 创建顶点数组对象
