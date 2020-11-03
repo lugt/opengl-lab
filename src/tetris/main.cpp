@@ -59,14 +59,23 @@
 #include <cstdlib>
 #include <iostream>
 
+#include <chrono>
+#include <algorithm>
+
 using namespace std;
 
-int starttime;			// 控制方块向下移动时间
+using std::chrono::steady_clock;
+typedef std::chrono::steady_clock::time_point TIME_PT;
+
+TIME_PT starttime;			// 控制方块向下移动时间
+
 int rotation = 0;		// 控制当前窗口中的方块旋转
 vec2 tile[4];			// 表示当前窗口中的方块
 bool gameover = false;	// 游戏结束控制变量
 int xsize = 400;		// 窗口大小（尽量不要变动窗口大小！）
 int ysize = 720;
+
+INT64 game_score = 0;
 
 // 一个二维数组表示所有可能出现的方块和方向。
 vec2 allRotationsLshape[4][4] =
@@ -77,15 +86,19 @@ vec2 allRotationsLshape[4][4] =
 
 // 绘制窗口的颜色变量
 vec4 orange = vec4(1.0, 0.5, 0.0, 1.0);
+vec4 blue   = vec4(0.3, 0.2, 1.0, 1.0);
 vec4 white  = vec4(1.0, 1.0, 1.0, 1.0);
 vec4 black  = vec4(0.0, 0.0, 0.0, 1.0);
+vec4 ENABLED_COLOR = vec4(1.0, 0.5, 0.0, 1.0);
 
 // 当前方块的位置（以棋盘格的左下角为原点的坐标系）
 vec2 tilepos = vec2(5, 19);
 
+const UINT32 BOARD_WIDTH = 10, BOARD_HEIGHT = 20;
+
 // 布尔数组表示棋盘格的某位置是否被方块填充，即board[x][y] = true表示(x,y)处格子被填充。
 // （以棋盘格的左下角为原点的坐标系）
-bool board[10][20];
+bool board[BOARD_WIDTH][BOARD_HEIGHT];
 
 
 // 当棋盘格某些位置被方块填充之后，记录这些位置上被填充的颜色
@@ -130,10 +143,12 @@ void updatetile()
 		GLfloat x = tilepos.x + tile[i].x;
 		GLfloat y = tilepos.y + tile[i].y;
 
-		vec4 p1 = vec4(33.0 + (x * 33.0), 33.0 + (y * 33.0), .4, 1);
-		vec4 p2 = vec4(33.0 + (x * 33.0), 66.0 + (y * 33.0), .4, 1);
-		vec4 p3 = vec4(66.0 + (x * 33.0), 33.0 + (y * 33.0), .4, 1);
-		vec4 p4 = vec4(66.0 + (x * 33.0), 66.0 + (y * 33.0), .4, 1);
+		const FLOAT32 HSIZ = 33.0, FSIZ = 66.0;
+
+		vec4 p1 = vec4(HSIZ + (x * HSIZ), HSIZ + (y * HSIZ), .4, 1);
+		vec4 p2 = vec4(HSIZ + (x * HSIZ), FSIZ + (y * HSIZ), .4, 1);
+		vec4 p3 = vec4(FSIZ + (x * HSIZ), HSIZ + (y * HSIZ), .4, 1);
+		vec4 p4 = vec4(FSIZ + (x * HSIZ), FSIZ + (y * HSIZ), .4, 1);
 
 		// 每个格子包含两个三角形，所以有6个顶点坐标
 		vec4 newpoints[6] = {p1, p2, p3, p2, p3, p4};
@@ -161,14 +176,13 @@ void newtile()
 
 	// 给新方块赋上颜色
 	vec4 newcolours[24];
-	for (int i = 0; i < 24; i++)
-		newcolours[i] = orange;
+	for (int i = 0; i < 24; i++) {
+    newcolours[i] = blue;
+  }
 
 	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[5]);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(newcolours), newcolours);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-
 	glBindVertexArray(0);
 }
 
@@ -201,34 +215,39 @@ void init()
 		gridcolours[i] = white;
 
 	// 初始化棋盘格，并将没有被填充的格子设置成黑色
-	vec4 boardpoints[1200];
-	for (int i = 0; i < 1200; i++)
+	UINT32 pts = BOARD_WIDTH * BOARD_HEIGHT * 6;
+
+	vec4 boardpoints[pts];
+	for (int i = 0; i < pts; i++)
 		boardcolours[i] = black;
 
 	// 对每个格子，初始化6个顶点，表示两个三角形，绘制一个正方形格子
-	for (int i = 0; i < 20; i++)
-		for (int j = 0; j < 10; j++)
+	for (int i = 0; i < BOARD_HEIGHT; i++)
+		for (int j = 0; j < BOARD_WIDTH; j++)
 		{
 			vec4 p1 = vec4(33.0 + (j * 33.0), 33.0 + (i * 33.0), .5, 1);
 			vec4 p2 = vec4(33.0 + (j * 33.0), 66.0 + (i * 33.0), .5, 1);
 			vec4 p3 = vec4(66.0 + (j * 33.0), 33.0 + (i * 33.0), .5, 1);
 			vec4 p4 = vec4(66.0 + (j * 33.0), 66.0 + (i * 33.0), .5, 1);
 
-			boardpoints[6*(10*i + j)    ] = p1;
-			boardpoints[6*(10*i + j) + 1] = p2;
-			boardpoints[6*(10*i + j) + 2] = p3;
-			boardpoints[6*(10*i + j) + 3] = p2;
-			boardpoints[6*(10*i + j) + 4] = p3;
-			boardpoints[6*(10*i + j) + 5] = p4;
+			boardpoints[6*(BOARD_WIDTH*i + j)    ] = p1;
+			boardpoints[6*(BOARD_WIDTH*i + j) + 1] = p2;
+			boardpoints[6*(BOARD_WIDTH*i + j) + 2] = p3;
+			boardpoints[6*(BOARD_WIDTH*i + j) + 3] = p2;
+			boardpoints[6*(BOARD_WIDTH*i + j) + 4] = p3;
+			boardpoints[6*(BOARD_WIDTH*i + j) + 5] = p4;
 		}
 
 	// 将棋盘格所有位置的填充与否都设置为false（没有被填充）
-	for (int i = 0; i < 10; i++)
-		for (int j = 0; j < 20; j++)
-			board[i][j] = false;
+	for (int i = 0; i < BOARD_WIDTH; i++) {
+    for (int j = 0; j < BOARD_HEIGHT; j++) {
+      board[i][j] = false;
+    }
+  }
 
 	// 载入着色器
-	GLuint program = InitShader("vshader.glsl", "fshader.glsl");
+	GLuint program = InitShader("/Users/xc5/CLionProjects/opengl/example2/src/tetris/vshader.glsl",
+                             "/Users/xc5/CLionProjects/opengl/example2/src/tetris/fshader.glsl");
 	glUseProgram(program);
 
 	locxsize = glGetUniformLocation(program, "xsize");
@@ -292,7 +311,7 @@ void init()
 
 	// 游戏初始化
 	newtile();
-	starttime = glutGet(GLUT_ELAPSED_TIME);
+	starttime = std::chrono::steady_clock::now();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -300,9 +319,12 @@ void init()
 
 bool checkvalid(vec2 cellpos)
 {
-	if((cellpos.x >=0) && (cellpos.x < 10) && (cellpos.y >= 0) && (cellpos.y < 20) )
-		return true;
-	else
+	if((cellpos.x >=0) && (cellpos.x < BOARD_WIDTH) && (cellpos.y >= 0) && (cellpos.y < BOARD_HEIGHT) ) {
+    if (board[(INT32)(cellpos.x)][(INT32)(cellpos.y)]) {
+      return false;
+    }
+	  return true;
+  } else
 		return false;
 }
 
@@ -332,9 +354,37 @@ void rotate()
 //////////////////////////////////////////////////////////////////////////
 // 检查棋盘格在row行有没有被填充满
 
-void checkfullrow(int row)
+BOOL checkfullrow(int row_id)
 {
+  UINT32 row_count = 0;
+  for(UINT32 x = 0; x < BOARD_WIDTH; x++) {
+    row_count += (board[x][row_id]) ? 1 : 0;
+  }
 
+  // full row found.
+  if (row_count == BOARD_WIDTH) {
+    // cancel this row and move everything above down for 1
+    // X X O O
+    // O O X O, Look above and check if need to change
+    for (INT32 cur_row = row_id; cur_row < BOARD_HEIGHT - 1; cur_row++) {
+      Is_True(cur_row < BOARD_HEIGHT - 1, ("Incorrect cur_row : %d", cur_row));
+      for (UINT32 x = 0; x < BOARD_WIDTH; x++) {
+        if (board[x][cur_row] != board[x][cur_row + 1]) {
+          board[x][cur_row] = board[x][cur_row + 1];
+          changecellcolour(vec2(x, cur_row), board[x][cur_row] ? ENABLED_COLOR : black);
+        }
+      }
+    }
+    // Remove first row.
+    for (UINT32 x = 0; x < BOARD_WIDTH; x++) {
+      if (board[x][BOARD_HEIGHT - 1]) {
+        board[x][BOARD_HEIGHT - 1] = false;
+        changecellcolour(vec2(x, BOARD_HEIGHT - 1), black);
+      }
+    }
+    return true;
+  }
+  return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -351,7 +401,7 @@ void settile()
 		// 将格子对应在棋盘格上的位置设置为填充
 		board[x][y] = true;
 		// 并将相应位置的颜色修改
-		changecellcolour(vec2(x,y), orange);
+		changecellcolour(vec2(x,y), ENABLED_COLOR);
 	}
 }
 
@@ -361,10 +411,23 @@ void settile()
 
 bool movetile(vec2 direction)
 {
+  // 4 tiles in a graphic element.
+  INT32 current_tile_size_count = 4;
+
 	// 计算移动之后的方块的位置坐标
-	vec2 newtilepos[4];
-	for (int i = 0; i < 4; i++)
+	vec2 newtilepos[current_tile_size_count];
+	for (int i = 0; i < current_tile_size_count; i++)
 		newtilepos[i] = tile[i] + tilepos + direction;
+
+	BOOL stablized = false;
+	while (!stablized) {
+	  stablized = true;
+    for (int i = 0; i < BOARD_HEIGHT; i++) {
+      if (checkfullrow(i)) {
+        stablized = false;
+      }
+    }
+  }
 
 	// 检查移动之后的有效性
 	if (checkvalid(newtilepos[0])
@@ -389,7 +452,13 @@ bool movetile(vec2 direction)
 
 void restart()
 {
-
+  // Clear all the known boxes and restart.
+  for (INT32 i = 0; i < BOARD_WIDTH; ++i){
+    for (INT32 j = 0; j < BOARD_HEIGHT; ++j) {
+      board[i][j] = false;
+      changecellcolour(vec2(i,j), black);
+    }
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -411,8 +480,6 @@ void display()
 	glBindVertexArray(vaoIDs[0]);
 	glDrawArrays(GL_LINES, 0, 64);		 // 绘制棋盘格的线
 
-
-	glutSwapBuffers();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -425,29 +492,48 @@ void reshape(GLsizei w, GLsizei h)
 	glViewport(0, 0, w, h);
 }
 
+void test_func_1() {
+  for(UINT32 y = 3; y < 5; y++) {
+    for(UINT32 x = 0; x < BOARD_WIDTH; x++) {
+      board[x][y] = true;
+      // 并将相应位置的颜色修改
+      changecellcolour(vec2(x,y), ENABLED_COLOR);
+    }
+  }
+}
+
 //////////////////////////////////////////////////////////////////////////
 // 键盘响应事件中的特殊按键响应
 
-void special(int key, int x, int y)
+void special(UINT32 key, int x, int y)
 {
 	if(!gameover)
 	{
 		switch(key)
 		{
-			case GLUT_KEY_UP:	// 向上按键旋转方块
+			case GLFW_KEY_UP:	// 向上按键旋转方块
 				rotate();
 				break;
-			case GLUT_KEY_DOWN: // 向下按键移动方块
+		  case GLFW_KEY_S: {
+        Is_Trace(true, (stdout, "Your score : %lld \n", game_score));
+        break;
+		  }
+		  case GLFW_KEY_T: {
+        test_func_1();
+		    break;
+		  }
+			case GLFW_KEY_DOWN: // 向下按键移动方块
+        game_score ++;
 				if (!movetile(vec2(0, -1)))
 				{
 					settile();
 					newtile();
 				}
 				break;
-			case GLUT_KEY_LEFT:  // 向左按键移动方块
+			case GLFW_KEY_LEFT:  // 向左按键移动方块
 				movetile(vec2(-1, 0));
 				break;
-			case GLUT_KEY_RIGHT: // 向右按键移动方块
+			case GLFW_KEY_RIGHT: // 向右按键移动方块
 				movetile(vec2(1, 0));
 				break;
 		}
@@ -457,48 +543,126 @@ void special(int key, int x, int y)
 //////////////////////////////////////////////////////////////////////////
 // 键盘响应时间中的普通按键响应
 
-void keyboard(unsigned char key, int x, int y)
+void keyboard(UINT32 key)
 {
 	switch(key)
 	{
-		case 033: // ESC键 和 'q' 键退出游戏
+		case GLFW_KEY_ESCAPE: // ESC键 和 'q' 键退出游戏
 			exit(EXIT_SUCCESS);
 			break;
-		case 'q':
+		case GLFW_KEY_Q:
 			exit (EXIT_SUCCESS);
 			break;
-		case 'r': // 'r' 键重启游戏
+		case GLFW_KEY_R: // 'r' 键重启游戏
 			restart();
 			break;
+	  default:
+      special(key, 0, 0);
+      break;
 	}
-	glutPostRedisplay();
+}
+
+// Is called whenever a key is pressed/released via GLFW
+void
+key_callback(GLFWwindow *window, int key, int scancode, int action, int mode) {
+  std::cout << key << std::endl;
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    glfwSetWindowShouldClose(window, GL_TRUE);
+  } else if (action == GLFW_PRESS) {
+    keyboard(key);
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////
 
 void idle(void)
 {
-	glutPostRedisplay();
+	//
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-int main(int argc, char **argv)
-{
-	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
-	glutInitWindowSize(xsize, ysize);
-	glutInitWindowPosition(680, 178);
-	glutCreateWindow("Mid-Term-Skeleton-Code");
-	glewInit();
-	init();
-
-	glutDisplayFunc(display);
-	glutReshapeFunc(reshape);
-	glutSpecialFunc(special);
-	glutKeyboardFunc(keyboard);
-	glutIdleFunc(idle);
-
-	glutMainLoop();
-	return 0;
+// Resize callback
+void framebuffer_size_callback(GLFWwindow *window, INT32 width, INT32 height) {
+  glViewport(0, 0, width, height);
+  reshape(width, height);
 }
+
+// The MAIN function, from here we start the application and run the game loop
+INT32 main(INT32 argc, char **argv) {
+
+  std::cout << "Starting GLFW context, Comapt version 3.3" << std::endl;
+  // Init GLFW
+  glfwInit();
+  // Set all the required options for GLFW
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
+
+  // Create a GLFWwindow object that we can use for GLFW's functions
+  GLFWwindow *window = glfwCreateWindow(xsize, ysize, "Mid-Term-2017152003", NULL,
+                                        NULL);
+  if (window == NULL) {
+    std::cout << "Failed to create GLFW window" << std::endl;
+    glfwTerminate();
+    return -1;
+  }
+
+  glfwMakeContextCurrent(window);
+
+  // Ensure we can capture the escape key being pressed below
+  glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+  // Hide the mouse and enable unlimited mouvement
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+  // Set the mouse at the center of the screen
+  glfwPollEvents();
+  glfwSetCursorPos(window, xsize/2, ysize/2);
+
+  // Enable depth test
+  // glEnable(GL_DEPTH_TEST);
+
+  // Accept fragment if it closer to the camera than the former one
+  // glDepthFunc(GL_LESS);
+
+  // Set the required callback functions
+  glfwSetKeyCallback(window, key_callback);
+  glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+
+  if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
+    std::cout << "Failed to initialize OpenGL context" << std::endl;
+    return -1;
+  }
+
+  // Define the viewport dimensions
+  glViewport(0, 0, xsize, ysize);
+
+  const GLubyte *n1 = glGetString(GL_VERSION);
+  std::cout << "openGL version string : " << n1 << std::endl;
+
+  // Initialize shaders
+  init();
+
+//  glEnable(GL_DEPTH_TEST);
+//  glDepthFunc(GL_LESS);
+
+  // Game loop
+  while (!glfwWindowShouldClose(window)) {
+
+    display();
+
+    // Check if any events have been activated (key pressed, mouse moved etc.) and call corresponding response functions
+    glfwPollEvents();
+
+    // Swap the screen buffers
+    glfwSwapBuffers(window);
+  }
+
+  // Terminates GLFW, clearing any resources allocated by GLFW.
+  glfwTerminate();
+  return 0;
+}
+
